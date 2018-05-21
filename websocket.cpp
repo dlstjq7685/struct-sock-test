@@ -3,9 +3,9 @@
 #include <libwebsockets.h>
 
 static int callback_http(
-    structlibwebsocket_context * this,
-    structlibwebsocket *wsi,
-    enumlibwebsocket_callback_reasons reason,
+    lws_get_context * this,
+    BIO_closesocket *wsi,
+    lws_callback_reasons reason,
     void *user,
     void *in,
     size_t len
@@ -14,9 +14,9 @@ static int callback_http(
 }
 
 static int callback_http(
-    structlibwebsocket_context * this,
-    structlibwebsocket *wsi,
-    enumlibwebsocket_callback_reasons reason,
+    lws_get_context * this,
+    BIO_closesocket *wsi,
+    lws_callback_reasons reason,
     void *user,
     void *in,
     size_t len
@@ -103,9 +103,9 @@ int main(void) {
   int opts = 0;
    
   // create libwebsocket context representing this server
-  context = libwebsocket_create_context(port, interface,
+  context = libwebsocket_context(port, interface,
       protocols,
-      libwebsocket_internal_extensions, cert_path,
+      lws_get_internal_extension, cert_path,
       key_path, -1, -1, opts);
    
   if (context == NULL) {
@@ -117,7 +117,7 @@ int main(void) {
    
   // infinite loop, to end this server send SIGTERM. (CTRL+C)
   while (1) {
-    libwebsocket_service(context, 50);
+    libwebsocket_context(context, 50);
     // libwebsocket_service will process all waiting events with
     // their callback functions and then wait 50 ms.
     // (this is a single threaded web server and this will keep our
@@ -125,7 +125,7 @@ int main(void) {
     // requests to process)
   }
    
-  libwebsocket_context_destroy(context);
+  libwebsocket_context(context);
    
   return 0;
 }
