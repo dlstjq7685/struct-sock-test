@@ -1,131 +1,178 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include <signal.h>
+#include <sys/time.h>
+
 #include <libwebsockets.h>
 
-static int callback_http(
-    lws_get_context * this,
-    BIO_closesocket *wsi,
-    lws_callback_reasons reason,
-    void *user,
-    void *in,
-    size_t len
-) {
-    return 0;
-}
+//---------
+int close_testing = 1;
+int force_exit = 0;
 
-static int callback_http(
-    lws_get_context * this,
-    BIO_closesocket *wsi,
-    lws_callback_reasons reason,
-    void *user,
-    void *in,
-    size_t len
-) {
-  switch (reason) {
-    // just log message that someone is connecting
-    case LWS_CALLBACK_ESTABLISHED: 
-      printf("connection established\n");
-      break;
-    case LWS_CALLBACK_RECEIVE: { // the funny part
-      // Create a buffer to hold our response
-      // it has to have some pre and post padding.
-      // You don't need to care what comes there, libwebsockets
-      // will do everything for you. For more info see
-      // http://git.warmcat.com/cgi-bin/cgit/libwebsockets/tree/lib/libwebsockets.h#n597
-      unsigned char *buf = (unsigned char*)
-          malloc(LWS_SEND_BUFFER_PRE_PADDING + len
-              + LWS_SEND_BUFFER_POST_PADDING);
-           
-      int i;
-           
-      // Pointer to `void *in` holds the incoming request we're just
-      // going to put it in reverse order and put it in `buf` with
-      // correct offset. `len` holds length of the request.
-      for (i=0; i < len; i++) {
-        buf[LWS_SEND_BUFFER_PRE_PADDING + (len - 1) - i ] = 
-            ((char *) in)[i];
-      }
-           
-      // Log what we received and what we're going to send as a 
-      // response that disco syntax `%.*s` is used to print just a
-      // part of our buffer.
-      // http://stackoverflow.com/questions/5189071/print-part-of-char-array
-      printf("received data: %s, replying: %.*s\n", (char *) in,
-          (int) len, buf + LWS_SEND_BUFFER_PRE_PADDING);
-           
-      // send response
-      // just notice that we have to tell where exactly our response
-      // starts. That's why there's buf[LWS_SEND_BUFFER_PRE_PADDING]
-      // and how long it is. We know that our response has the same
-      // length as request because it's the same message 
-      // in reverse order.
-      libwebsocket_write(wsi, &buf[LWS_SEND_BUFFER_PRE_PADDING],
-          len, LWS_WRITE_TEXT);
-           
-      // release memory back into the wild
-      free(buf);
-      break;
-    }
-    default:
-      break;
-  }
-   
-  return 0;
-}
+struct lws_context *context;
 
+//---------
+enum demo_protocols {
+    /* always first */
+    PROTOCOL_DUMB_INCREMENT = 0,
 
-static struct libwebsocket_protocols protocols[] = {
-  /* first protocol must always be HTTP handler */
-  {
-    "http-only",   // name
-    callback_http, // callback
-    0              // per_session_data_size
-  },
-  {
-    "dumb-increment-protocol", // protocol name - very important!
-    callback_dumb_increment,   // callback
-    0                          // we don't use any per session data
-  },
-  {
-    NULL, NULL, 0   /* End of list */
-  }
+    /* always last */
+    DEMO_PROTOCOL_COUNT
+    };
+
+//-----------
+struct per_session_data__dumb_increment {
+        int number;
 };
+//********************
+int  callback_dumb_increment(struct lws *wsi, enum lws_callback_reasons reason,
+                        void *user, void *in, size_t len)
+{
+        unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + 512];
+        struct per_session_data__dumb_increment *pss =
+                        (struct per_session_data__dumb_increment *)user;
+        unsigned char *p = &buf[LWS_SEND_BUFFER_PRE_PADDING];
+        int n, m;
 
-int main(void) {
-  // server url will be http://localhost:9000
-  int port = 9000;
-  const char *interface = NULL;
-  struct libwebsocket_context *context;
-  // we're not using ssl
-  const char *cert_path = NULL;
-  const char *key_path = NULL;
-  // no special options
-  int opts = 0;
-   
-  // create libwebsocket context representing this server
-  context = libwebsocket_context(port, interface,
-      protocols,
-      lws_get_internal_extension, cert_path,
-      key_path, -1, -1, opts);
-   
-  if (context == NULL) {
-    fprintf(stderr, "libwebsocket init failed\n");
-    return -1;
-  }
-   
-  printf("starting server...\n");
-   
-  // infinite loop, to end this server send SIGTERM. (CTRL+C)
-  while (1) {
-    libwebsocket_context(context, 50);
-    // libwebsocket_service will process all waiting events with
-    // their callback functions and then wait 50 ms.
-    // (this is a single threaded web server and this will keep our
-    // server from generating load while there are not
-    // requests to process)
-  }
-   
-  libwebsocket_context(context);
-   
-  return 0;
+        switch (reason) {
+
+        case LWS_CALLBACK_ESTABLISHED:
+                pss->number = 0;
+                break;
+
+        case LWS_CALLBACK_SERVER_WRITEABLE:
+                n = sprintf((char *)p, "%d", pss->number++);
+                m = lws_write(wsi, p, n, LWS_WRITE_TEXT);
+                if (m < n) {
+                        lwsl_err("ERROR %d writing to di socket\n", n);
+                        return -1;
+                }
+                if (close_testing && pss->number == 50) {
+                        lwsl_info("close tesing limit, closing\n");
+                        return -1;
+                }
+                break;
+
+        case LWS_CALLBACK_RECEIVE:
+                if (len < 6)
+                        break;
+                if (strcmp((const char *)in, "reset\n") == 0)
+                        pss->number = 0;
+                if (strcmp((const char *)in, "closeme\n") == 0) {
+                        lwsl_notice("dumb_inc: closing as requested\n");
+                        lws_close_reason(wsi, LWS_CLOSE_STATUS_GOINGAWAY,
+                                         (unsigned char *)"seeya", 5);
+                        return -1;
+                }
+                break;
+
+        case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+                break;
+
+        /*
+         * this just demonstrates how to handle
+         * LWS_CALLBACK_WS_PEER_INITIATED_CLOSE and extract the peer's close
+         * code and auxiliary data.  You can just not handle it if you don't
+         * have a use for this.
+         */
+        case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+                lwsl_notice("LWS_CALLBACK_WS_PEER_INITIATED_CLOSE: len %d\n",
+                            len);
+                for (n = 0; n < (int)len; n++)
+                        lwsl_notice(" %d: 0x%02X\n", n,
+                                    ((unsigned char *)in)[n]);
+                break;
+
+        default:
+                break;
+        }
+
+        return 0;
+}//callback_dumb_increment
+
+//-----------
+static struct lws_protocols protocols[] = {
+        /* first protocol must always be HTTP handler */
+        {
+                "dumb-increment-protocol",
+                callback_dumb_increment,
+                sizeof(struct per_session_data__dumb_increment),
+                10,
+        },
+        { NULL, NULL, 0, 0 } /* terminator */
+};//protocols
+
+//**************************
+void sighandler(int sig)
+{
+        force_exit = 1;
+        lws_cancel_service(context);
 }
+
+
+//*********************************************************************
+int main(int argc, char **argv)
+{
+  struct lws_context_creation_info info;
+  int opts = 0;
+  int n = 0;
+  unsigned int ms, oldms = 0;   
+  
+  memset(&info, 0, sizeof info);
+  info.port = 9999;
+  info.protocols = protocols;
+  info.ssl_cert_filepath = NULL;
+  info.ssl_private_key_filepath = NULL;
+  info.extensions = lws_get_internal_extensions();
+
+  info.gid = -1;
+  info.uid = -1;
+  info.max_http_header_pool = 1;
+  info.options = opts;
+    
+  signal(SIGINT, sighandler);
+  
+        context = lws_create_context(&info);
+        if (context == NULL) {
+                lwsl_err("libwebsocket init failed\n");
+                return -1;
+        }
+  
+  n = 0;
+        while (n >= 0 && !force_exit) {
+                struct timeval tv;
+
+                gettimeofday(&tv, NULL);
+
+                /*
+                 * This provokes the LWS_CALLBACK_SERVER_WRITEABLE for every
+                 * live websocket connection using the DUMB_INCREMENT protocol,
+                 * as soon as it can take more packets (usually immediately)
+                 */
+
+                ms = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+                if ((ms - oldms) > 50) {
+                        lws_callback_on_writable_all_protocol(context,
+                                &protocols[PROTOCOL_DUMB_INCREMENT]);
+                        oldms = ms;
+                }
+
+                /*
+                 * If libwebsockets sockets are all we care about,
+                 * you can use this api which takes care of the poll()
+                 * and looping through finding who needed service.
+                 *
+                 * If no socket needs service, it'll return anyway after
+                 * the number of ms in the second argument.
+                 */
+
+                n = lws_service(context, 50);
+        }//while n>=0
+  
+  lws_context_destroy(context);
+  
+  return 0;
+  
+}//main
