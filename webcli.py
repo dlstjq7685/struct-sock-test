@@ -38,7 +38,7 @@ def on_open(ws):
 if __name__ == "__main__":
     #websocket.enableTrace(True)
     websocket.enableTrace(False)
-    ws = websocket.WebSocketApp("wss://xsi-test.ml/chat/",
+    ws = websocket.WebSocketApp("ws://localhost:8000/ws/",
                               on_message = on_message,
                               on_error = on_error,
                               on_close = on_close)
