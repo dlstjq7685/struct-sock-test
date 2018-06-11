@@ -25,7 +25,7 @@ def on_open(ws):
     logger.info('Open')
     for i in range(10):
       time.sleep(1)
-      message = "Hello " + str(i)
+      message = "test " + str(i)
       ws.send(message)
       logger.info('Sent:{}'.format(message))
     time.sleep(1)
@@ -38,7 +38,7 @@ def on_open(ws):
 if __name__ == "__main__":
     #websocket.enableTrace(True)
     websocket.enableTrace(False)
-    ws = websocket.WebSocketApp("ws://localhost:8000/ws/",
+    ws = websocket.WebSocketApp("wss://xsi-test.ml/wss/",
                               on_message = on_message,
                               on_error = on_error,
                               on_close = on_close)
