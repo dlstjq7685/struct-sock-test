@@ -3,14 +3,16 @@
 only socket multi server
 now error:
     dont close on receive thread
+    soulution: multiprocess
 """
 
 from socket import *
+import os
 import threading
 from time import ctime
 
 HOST = 'localhost'
-PORT = 12345
+PORT = 8000
 BUFSIZE = 1024
 ADDR = (HOST, PORT)
 LIMIT = 16
@@ -38,6 +40,10 @@ class submessage(threading.Thread):
         return
 
     def run(self):
+        log = open('pid','a')
+        log.writelines(str(os.getpid())+ '\n')
+        log.close()
+
         while self.__isrun:
             self.sock.data = self.sock.users[self.number].recv(BUFSIZE)
             if not self.sock.data:
@@ -63,6 +69,10 @@ class mysendmessage(threading.Thread):
         return
 
     def run(self):
+        log = open('pid','a')
+        log.writelines(str(os.getpid())+ '\n')
+        log.close()
+
         while self.__isrun:
             if self.sock.data:        
                 if self.sock.data == 'out':
@@ -118,17 +128,15 @@ class mysocket(threading.Thread):
 def main():
     sock = shareob()
 
+    log = open('pid','w')
+    log.writelines(str(os.getpid())+ '\n')
+    log.close()
+
     my = mysocket(objects=sock)
     sendme = mysendmessage(objects=sock)
     print('start thread')
     my.start()
     sendme.start()
-
-    while sock.isrun:
-        pass
-    
-    my._stop()
-    sendme._stop()
 
     sendme.join()
     my.join()
