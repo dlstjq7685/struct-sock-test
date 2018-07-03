@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-
+"""
+client program
+"""
 from socket import *
 import threading
 

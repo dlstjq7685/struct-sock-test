@@ -45,9 +45,6 @@ def allsender(child, objects=None):
         if temp is not None:
             socklist.append(temp)
 
-
-
-
 def sub_reader(objects=None):
     print('test')
 
