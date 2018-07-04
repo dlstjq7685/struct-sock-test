@@ -27,11 +27,16 @@ def sender(clist,flag,data,locker):
                     locker.release()
 
 #one client one receiver
-def receiver(sock,flag, data):
+def receiver(sock,flag, data,locker):
     temp = None    
     while flag.value:
         temp = sock.recv(BUFSIZE)
-        data.append(temp.decode('utf-8'))
+        if temp:
+            locker.acquire()
+            try:
+                data.append(temp.decode('utf-8'))
+            finally:
+                locker.release()
 
 #only clientsocket listen
 def listener(clist,flag,data,locker):
@@ -47,7 +52,7 @@ def listener(clist,flag,data,locker):
         print('connected from ', addr)
 
         clist.append(tcpCilsock)
-        p.append(Process(target=receiver, args=(tcpCilsock, flag, data)))
+        p.append(Process(target=receiver, args=(tcpCilsock, flag, data,locker)))
         p[idx].start()
         idx += 1
 

@@ -5,7 +5,8 @@ client program
 from socket import *
 import threading
 from time import sleep
-HOST = 'localhost'
+
+HOST = '153.126.160.240'
 PORT = 8000
 BUFSIZE = 1024
 ADDR = (HOST, PORT)
