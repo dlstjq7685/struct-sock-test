@@ -134,10 +134,11 @@ def main():
 
     my = mysocket(objects=sock)
     sendme = mysendmessage(objects=sock)
+    my.setDaemon(True)
+    sendme.setDaemon(True)
     print('start thread')
     my.start()
     sendme.start()
-
     sendme.join()
     my.join()
     print('end thread')

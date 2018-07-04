@@ -1,9 +1,11 @@
 """
 use this server
+clear multi-thread memory issue
+automatic socket process destroy
 """
 from socket import *
 from time import sleep, ctime
-from multiprocessing import Process, Manager, Value
+from multiprocessing import Process, Manager, Value, Lock
 
 HOST = 'localhost'
 PORT = 8000
@@ -12,13 +14,17 @@ ADDR = (HOST, PORT)
 LIMIT = 16
 
 #all client send
-def sender(clist,flag,data):
+def sender(clist,flag,data,locker):
     while flag.value:
         if len(data) > 0 :
             if data[0] :
-                for i in range(0,len(clist)):
-                    clist[i].send(bytes('[%s] %s' %(ctime(), data[0]), 'utf-8'))
-                data.pop()
+                locker.acquire()
+                try:
+                    for i in range(0,len(clist)):
+                        clist[i].send(bytes('[%s] %s' %(ctime(), data[0]), 'utf-8'))
+                    data.pop()
+                finally:
+                    locker.release()
 
 #one client one receiver
 def receiver(sock,flag, data):
@@ -26,10 +32,9 @@ def receiver(sock,flag, data):
     while flag.value:
         temp = sock.recv(BUFSIZE)
         data.append(temp.decode('utf-8'))
-        print(data)
 
 #only clientsocket listen
-def listener(clist,flag,data):
+def listener(clist,flag,data,locker):
     tcpSersock = socket(AF_INET, SOCK_STREAM)
     tcpSersock.bind(ADDR)
     tcpSersock.listen(LIMIT)
@@ -52,9 +57,10 @@ if __name__=="__main__":
     clist = man.list()
     data = dman.list()
     flag = Value('i', True)
+    locker = Lock()
 
-    lis = Process(target=listener, args=(clist,flag,data))
-    sen = Process(target=sender, args=(clist,flag,data))
+    lis = Process(target=listener, args=(clist,flag,data,locker))
+    sen = Process(target=sender, args=(clist,flag,data,locker))
 
     lis.start()
     sen.start()
