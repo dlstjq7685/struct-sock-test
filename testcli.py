@@ -6,7 +6,7 @@ from socket import *
 import threading
 from time import sleep
 
-HOST = '153.126.160.240'
+HOST = 'localhost'
 PORT = 8000
 BUFSIZE = 1024
 ADDR = (HOST, PORT)
